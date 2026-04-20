@@ -1,21 +1,22 @@
 FROM quay.io/fedora/fedora:44
 
-ARG RAMALAMA_STACK_VERSION=0.2.5
+ARG OGX_VERSION=1.0.0
 
-# hack that should be removed when the following bug is addressed
-# https://github.com/containers/ramalama-stack/issues/53
-RUN curl --create-dirs --output ~/.llama/providers.d/remote/inference/ramalama.yaml https://raw.githubusercontent.com/containers/ramalama-stack/refs/tags/v${RAMALAMA_STACK_VERSION}/src/ramalama_stack/providers.d/remote/inference/ramalama.yaml && \
-    curl --create-dirs --output /etc/ramalama/ramalama-run.yaml https://raw.githubusercontent.com/containers/ramalama-stack/refs/tags/v${RAMALAMA_STACK_VERSION}/src/ramalama_stack/ramalama-run.yaml
-
-RUN dnf -y install uv gcc python3-devel && \
+RUN dnf -y install uv gcc python3-devel git && \
     dnf -y clean all
 
 RUN uv venv && \
-    uv pip install ramalama-stack==${RAMALAMA_STACK_VERSION} \
-                   milvus-lite
+    uv pip install ogx==${OGX_VERSION}
 
 COPY --chmod=755 container-images/llama-stack/entrypoint.sh /usr/bin/entrypoint.sh
 
+COPY container-images/llama-stack/ramalama-run.yaml /opt/ramalama/etc/ramalama-run.yaml
+
+# see https://ogx-ai.github.io/docs/distributions/building_distro#air-gapped-and-disconnected-deployments
+ENV TIKTOKEN_CACHE_DIR="/opt/ramalama/var/tiktoken"
+RUN mkdir /opt/ramalama/var && \
+    uv run python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+
 ENTRYPOINT [ "/usr/bin/entrypoint.sh" ]
 
-CMD [ "llama",  "stack",  "run", "--image-type", "venv", "/etc/ramalama/ramalama-run.yaml" ]
+CMD [ "ogx",  "stack",  "run", "/opt/ramalama/etc/ramalama-run.yaml" ]

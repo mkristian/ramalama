@@ -852,6 +852,6 @@ def compute_serving_port(args, quiet: bool = False, exclude: Optional[list[str]]
         openai = f"http://localhost:{target_port}"
         if getattr(args, "api", None) == "llama-stack":
             perror(f"Llama Stack RESTAPI: {openai}")
-            openai = openai + "/v1/openai"
+            openai = openai + "/v1"
             perror(f"OpenAI RESTAPI: {openai}")
     return str(target_port)

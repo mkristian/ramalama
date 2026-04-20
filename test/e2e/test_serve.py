@@ -817,7 +817,7 @@ def test_serve_api(caplog):
         )
 
         assert re.search(fr".*Llama Stack RESTAPI: http://localhost:{container_port}", result)
-        assert re.search(fr".*OpenAI RESTAPI: http://localhost:{container_port}/v1/openai", result)
+        assert re.search(fr".*OpenAI RESTAPI: http://localhost:{container_port}/v1", result)
 
         # Inspect the models API
         # FIXME: llama-stack image is currently broken.

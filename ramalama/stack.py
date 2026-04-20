@@ -100,6 +100,7 @@ class Stack:
         mmproj_dest_path = self.model._get_mmproj_path(True, True, False)
         args2 = copy.copy(self.args)
         args2.port = self.model_port
+        args2.webui = 'off'
         exec_args = assemble_command(args2)
         draft_model_paths = None
         if self.draft_model is not None:
@@ -142,7 +143,7 @@ class Stack:
                 k.add("comment", f"# RamaLama service for {self.model.model_alias}")
                 k.add("comment", "# Serving RESTAPIs:")
                 k.add("comment", f"#    Llama Stack: {openai}")
-                k.add("comment", f"#    OpenAI:      {openai}/v1/openai\n")
+                k.add("comment", f"#    OpenAI:      {openai}/v1\n")
                 k.write(self.args.generate.output_dir)
                 return
 
