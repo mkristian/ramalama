@@ -4,13 +4,15 @@ import argparse
 import copy
 import json
 import platform
+import sys
 from collections.abc import Callable
 from typing import Optional, cast
 
 from ramalama.arg_types import BaseEngineArgsType
-from ramalama.common import genname, run_cmd
+from ramalama.common import genname, perror, run_cmd
 from ramalama.config import ActiveConfig
 from ramalama.engine import Engine, stop_container
+from ramalama.model_server import list_server_models
 from ramalama.plugins.loader import get_runtime
 from ramalama.transports.base import compute_serving_port
 from ramalama.transports.transport_factory import New
@@ -20,8 +22,12 @@ def default_pi_image() -> str:
     return ActiveConfig().default_pi_image
 
 
-def _add_common_sandbox_args(parser: argparse.ArgumentParser) -> None:
-    """Add --workdir and ARGS arguments shared by all sandbox subcommands."""
+def _add_common_sandbox_args(parser: argparse.ArgumentParser, model_comp: Callable, runtime) -> None:
+    """Add --workdir, ARGS, MODEL and inference arguments shared by all sandbox subcommands."""
+    if getattr(runtime, "_add_inference_args", None):
+        # Consider adding this to the plugin interface for commands which need to run an
+        # inference server
+        runtime._add_inference_args(parser, "serve")  # type: ignore[attr-defined]
     parser.add_argument(
         "-w",
         "--workdir",
@@ -35,6 +41,13 @@ def _add_common_sandbox_args(parser: argparse.ArgumentParser) -> None:
         "--api-key",
         default="ramalama",
         help="OpenAI-compatible API key.",
+    )
+    parser.add_argument(
+        "MODEL",
+        default=None,
+        nargs="?",
+        completer=model_comp,
+        help="AI model to use. Use '_' or omit to infer the first model from the model server.",
     )
     parser.add_argument(
         "ARGS",
@@ -52,46 +65,35 @@ def add_sandbox_subparsers(subparsers: argparse._SubParsersAction, img_comp: Cal
     """
     runtime = get_runtime(ActiveConfig().runtime)
     parser = subparsers.add_parser("goose", help="run Goose in a sandbox, backed by a local AI Model")
-    if getattr(runtime, "_add_inference_args", None):
-        # Consider adding this to the plugin interface for commands which need to run an
-        # inference server
-        runtime._add_inference_args(parser, "serve")  # type: ignore[attr-defined]
-    parser.add_argument("MODEL", completer=model_comp)
     parser.add_argument(
         "--goose-image",
         default="ghcr.io/aaif-goose/goose:1.43.0",
         completer=img_comp,
         help="Goose container image",
     )
-    _add_common_sandbox_args(parser)
+    _add_common_sandbox_args(parser, model_comp, runtime)
     parser.set_defaults(func=run_sandbox_goose)
     yield parser
 
     parser = subparsers.add_parser("opencode", help="run OpenCode in a sandbox, backed by a local AI Model")
-    if getattr(runtime, "_add_inference_args", None):
-        runtime._add_inference_args(parser, "serve")  # type: ignore[attr-defined]
-    parser.add_argument("MODEL", completer=model_comp)
     parser.add_argument(
         "--opencode-image",
         default="ghcr.io/anomalyco/opencode:1.17.20",
         completer=img_comp,
         help="OpenCode container image",
     )
-    _add_common_sandbox_args(parser)
+    _add_common_sandbox_args(parser, model_comp, runtime)
     parser.set_defaults(func=run_sandbox_opencode)
     yield parser
 
     parser = subparsers.add_parser("pi", help="run Pi in a sandbox, backed by a local AI Model")
-    if getattr(runtime, "_add_inference_args", None):
-        runtime._add_inference_args(parser, "serve")  # type: ignore[attr-defined]
-    parser.add_argument("MODEL", completer=model_comp)
     parser.add_argument(
         "--pi-image",
         default=default_pi_image(),
         completer=img_comp,
         help="Pi container image",
     )
-    _add_common_sandbox_args(parser)
+    _add_common_sandbox_args(parser, model_comp, runtime)
     parser.set_defaults(func=run_sandbox_pi)
     yield parser
 
@@ -287,7 +289,21 @@ def run_sandbox(args: SandboxEngineArgsType, agent_cls: type[Agent]):
         raise ValueError("ramalama sandbox requires a container engine")
 
     sb_args = copy.copy(args)
-    sb_args.start_model_server = args.url is None
+    # If MODEL is not given or is '_', retrieve the first model from the model-server
+    if not sb_args.MODEL or sb_args.MODEL == "_":
+        url = sb_args.url or f"http://localhost:{sb_args.port}"
+        models = list_server_models(url, getattr(sb_args, "api_key", None))
+        if models:
+            sb_args.model = models[0]
+            print(f"Using first model from server ({url}): {sb_args.model}")
+        else:
+            perror(f"No model found at {url}")
+            sys.exit(1)
+        # Rewrite localhost/127.0.0.1 to host.containers.internal only when model was not given
+        if sb_args.url is None:
+            sb_args.url = f"http://host.{'docker' if args.container == 'docker' else 'containers'}.internal:{sb_args.port}"
+
+    sb_args.start_model_server = sb_args.url is None
     if not sb_args.start_model_server:
         sb_args.name = sb_args.name or genname()
 

@@ -324,6 +324,64 @@ def test_sandbox_using_url(caplog, agent):
 @skip_if_ppc64le
 @skip_if_s390x
 @pytest.mark.parametrize("agent", ["goose", "opencode", "pi"])
+def test_sandbox_url_without_local_model(caplog, agent):
+    """Sandbox should work with --url even when no model is pulled locally."""
+    caplog.set_level(logging.CRITICAL, logger="requests")
+    caplog.set_level(logging.CRITICAL, logger="urllib3")
+
+    # Workspace A: serve the model in a container
+    with RamalamaExecWorkspace() as serve_ctx:
+        serve_ctx.check_call(["ramalama", "pull", TEST_MODEL])
+
+        container_name = f"api{''.join(random.choices(string.ascii_letters + string.digits, k=5))}"
+        container_port = random.randint(64000, 65000)
+
+        serve_ctx.check_output(
+            [
+                "ramalama",
+                "serve",
+                "-d",
+                "--name",
+                container_name,
+                "--port",
+                str(container_port),
+                TEST_MODEL,
+            ],
+            stderr=subprocess.STDOUT,
+        )
+
+        # Discover the model name from the API (used by test_sandbox_using_url)
+        models = requests.get(f"http://localhost:{container_port}/models", timeout=60).json()
+        assert len(models["models"]) == 1
+
+        try:
+            # Workspace B: no local model, connect via --url
+            with RamalamaExecWorkspace() as sandbox_ctx:
+                result = sandbox_ctx.check_output(
+                    [
+                        "ramalama",
+                        "sandbox",
+                        agent,
+                        "--url",
+                        f"http://host.containers.internal:{container_port}",
+                        "_",
+                        "Hello",
+                    ],
+                    stderr=subprocess.STDOUT,
+                )
+
+            assert "Hi" in result or "Hello" in result or "help" in result or "today" in result or "assistant" in result
+        finally:
+            serve_ctx.check_call(["ramalama", "stop", container_name])
+
+
+@pytest.mark.e2e
+@pytest.mark.slow
+@skip_if_docker
+@skip_if_no_container
+@skip_if_ppc64le
+@skip_if_s390x
+@pytest.mark.parametrize("agent", ["goose", "opencode", "pi"])
 def test_sandbox_with_embedded_model_server(caplog, agent):
     # Configure logging for requests
     caplog.set_level(logging.CRITICAL, logger="requests")
