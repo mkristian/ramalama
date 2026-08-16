@@ -924,6 +924,18 @@ def test_router_mode_models_max_dry_run(shared_ctx, test_model):
 
 @pytest.mark.e2e
 @skip_if_no_container
+def test_router_mode_presets_file_dry_run(shared_ctx, test_model, tmp_path):
+    """--presets-file flag adds a bind mount and passes --presets to llama-server."""
+    presets = tmp_path / "presets.ini"
+    presets.write_text("[routing]\n")
+    ctx = shared_ctx
+    result = ctx.check_output(["ramalama", "-q", "--dryrun", "serve", "--presets-file", str(presets)])
+    assert re.search(r".*--mount=type=bind,src=.*,destination=/etc/presets\.ini,ro", result)
+    assert re.search(r".*--presets /etc/presets\.ini", result)
+
+
+@pytest.mark.e2e
+@skip_if_no_container
 @skip_if_darwin
 @skip_if_docker
 def test_serve_with_rag():
