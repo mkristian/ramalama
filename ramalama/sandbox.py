@@ -48,7 +48,7 @@ def default_pi_image() -> str:
 
 
 def _pi_provider_id() -> str:
-    return "llama-server"
+    return "llama.cpp"
 
 
 def _add_common_sandbox_args(parser: argparse.ArgumentParser, model_comp: Callable) -> None:
@@ -309,20 +309,22 @@ class Pi(Agent):
 
     def __init__(self, args: PiArgsType, model_name: str) -> None:
         super().__init__(args, model_name)
-        provider_id = _pi_provider_id()
         self.engine.add_name(f"pi-{args.name}")  # type: ignore[attr-defined]
         self.add_provider_discovery_env(args)
         self.engine.add_workdir(args)
         self.engine.add_args(args.pi_image)
-        pi_args = ["--provider", provider_id, "--model", self.model_name]
         if args.ARGS:
-            pi_args += ["-p", args.ARGS]
-        self.engine.add(pi_args)
+            self.engine.add_args("-p", args.ARGS)
 
     def add_provider_discovery_env(self, args: PiArgsType) -> None:
-        # pi-llama-server discovers and registers providers from LLAMA_SERVER_URL;
-        # --provider then selects the matching provider id for the active session.
-        self.engine.add_env_option(f"LLAMA_SERVER_URL={args.url}")
+        # The container entrypoint reads RAMALAMA_PI_BASE_URL / RAMALAMA_PI_API_KEY /
+        # RAMALAMA_PI_PROVIDER / RAMALAMA_PI_MODEL to generate ~/.pi/agent/models.json
+        # and, for llama.cpp servers, exports LLAMA_BASE_URL / LLAMA_API_KEY for pi's
+        # built-in llama.cpp provider.
+        self.engine.add_env_option(f"RAMALAMA_PI_BASE_URL={args.url}")
+        self.engine.add_env_option(f"RAMALAMA_PI_API_KEY={args.api_key}")
+        self.engine.add_env_option(f"RAMALAMA_PI_MODEL={self.model_name}")
+        self.engine.add_env_option(f"RAMALAMA_PI_PROVIDER={_pi_provider_id()}")
 
 
 def run_sandbox_goose(args: GooseArgsType):

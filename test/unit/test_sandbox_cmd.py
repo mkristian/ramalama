@@ -325,8 +325,8 @@ def test_opencode_args():
 
 
 def test_pi_provider_id():
-    """Pi provider id should be the pi-llama-server extension's registered name."""
-    assert _pi_provider_id() == "llama-server"
+    """Pi provider id should be pi's built-in llama.cpp provider."""
+    assert _pi_provider_id() == "llama.cpp"
 
 
 def test_pi_default_image():
@@ -355,17 +355,16 @@ def test_pi_custom_image():
 
 
 def test_pi_env_vars():
-    """Pi should set LLAMA_SERVER_URL for pi-llama-server extension"""
+    """Pi should set RAMALAMA_PI_* env vars for the built-in llama.cpp provider"""
     args = _make_pi_args()
     pi = Pi(args, "Qwen3-4B-Q4_K_M")
     cmd = pi.engine.exec_args
     assert "run" in cmd
     assert "--rm" in cmd
-    assert f"LLAMA_SERVER_URL={args.url}" in cmd
-    assert "--provider" in cmd
-    assert "llama-server" in cmd
-    assert "--model" in cmd
-    assert "Qwen3-4B-Q4_K_M" in cmd
+    assert f"RAMALAMA_PI_BASE_URL={args.url}" in cmd
+    assert f"RAMALAMA_PI_API_KEY={args.api_key}" in cmd
+    assert "RAMALAMA_PI_MODEL=Qwen3-4B-Q4_K_M" in cmd
+    assert f"RAMALAMA_PI_PROVIDER={_pi_provider_id()}" in cmd
 
 
 def test_pi_entrypoint(monkeypatch):
@@ -375,15 +374,8 @@ def test_pi_entrypoint(monkeypatch):
     pi = Pi(args, "test-model")
     cmd = pi.engine.exec_args
     assert "--entrypoint" not in cmd
-    assert "pi install npm:pi-llama-server" not in cmd
     assert "pi install npm:pi-web-access" not in cmd
-    assert cmd[-5:] == [
-        args.pi_image,
-        "--provider",
-        "llama-server",
-        "--model",
-        "test-model",
-    ]
+    assert cmd[-1:] == [args.pi_image]
 
 
 def test_pi_with_tty(monkeypatch):
@@ -391,13 +383,7 @@ def test_pi_with_tty(monkeypatch):
     monkeypatch.setattr("ramalama.engine.sys.stdin.isatty", lambda: True)
     args = _make_pi_args()
     pi = Pi(args, "test-model")
-    assert pi.engine.exec_args[-5:] == [
-        args.pi_image,
-        "--provider",
-        "llama-server",
-        "--model",
-        "test-model",
-    ]
+    assert pi.engine.exec_args[-1:] == [args.pi_image]
 
 
 def test_pi_no_tty(monkeypatch):
@@ -405,13 +391,7 @@ def test_pi_no_tty(monkeypatch):
     monkeypatch.setattr("ramalama.engine.sys.stdin.isatty", lambda: False)
     args = _make_pi_args()
     pi = Pi(args, "test-model")
-    assert pi.engine.exec_args[-5:] == [
-        args.pi_image,
-        "--provider",
-        "llama-server",
-        "--model",
-        "test-model",
-    ]
+    assert pi.engine.exec_args[-1:] == [args.pi_image]
 
 
 def test_pi_args():
@@ -475,8 +455,8 @@ def test_pi_router_mode():
     args = _make_pi_args()
     pi = Pi(args, "model-a")
     cmd = pi.engine.exec_args
-    assert cmd[cmd.index("--model") + 1] == "model-a"
-    assert "--provider" in cmd
+    assert "RAMALAMA_PI_MODEL=model-a" in cmd
+    assert "RAMALAMA_PI_PROVIDER=llama.cpp" in cmd
 
 
 def test_router_dryrun_uses_nonempty_model(monkeypatch):
