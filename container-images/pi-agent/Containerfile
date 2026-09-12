@@ -2,7 +2,6 @@ FROM quay.io/fedora/fedora:44
 
 ARG PI_VERSION=0.84.2
 ARG NODE_VERSION=26.7.0
-ARG PI_LLAMA_SERVER_VERSION=1.1.0
 ARG PI_WEB_ACCESS_VERSION=0.24.0
 ARG TARGETARCH
 
@@ -18,6 +17,7 @@ RUN dnf -y --nodocs --setopt=install_weak_deps=false install \
         libatomic \
         openssh-clients \
         ripgrep \
+        curl \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf
 
@@ -43,12 +43,13 @@ RUN echo "Include /home/node/.ssh/config" >> /etc/ssh/ssh_config \
     && echo "StrictHostKeyChecking accept-new" >> /etc/ssh/ssh_config
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION} \
-    && pi install npm:pi-llama-server@${PI_LLAMA_SERVER_VERSION} \
     && pi install npm:pi-web-access@${PI_WEB_ACCESS_VERSION} \
     && npm cache clean --force \
     && echo '{"workflow":"none"}' > /home/node/.pi/web-search.json \
     && rm -rf /tmp/* /root/.npm
 
+COPY --chmod=755 container-images/pi-agent/entrypoint.sh /usr/local/bin/entrypoint.sh
+
 WORKDIR /app
 
-ENTRYPOINT [ "pi" ]
+ENTRYPOINT [ "/usr/local/bin/entrypoint.sh" ]
